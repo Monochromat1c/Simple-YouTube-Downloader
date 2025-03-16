@@ -11,7 +11,7 @@ This project uses the following dependencies:
 
 ## Installation
 
-1.  **Install yt-dlp:**
+1.  **Install Python packages:**
 
     ```bash
     pip install yt-dlp
@@ -49,10 +49,30 @@ This project uses the following dependencies:
         sudo dnf install ffmpeg
         ```
 
-3.  **Run the script:**
+## Running the Application
 
-    ```bash
-    python youtube_downloader.py
-    ```
+### Method 1: Running from Source
+```bash
+python youtube_downloader.py
+```
 
-    The script will prompt you for the YouTube video URL and your download preferences (video/audio and format).
+### Method 2: Using the Executable
+1. Download the latest release
+2. Make sure FFmpeg is installed on your system
+3. Run the executable file
+
+The application will provide a simple GUI where you can:
+- Enter a YouTube URL
+- Choose between video or audio download
+- Click Download to start the process
+
+## Building the Executable
+To build the executable yourself:
+
+1. Install the required packages:
+   ```bash
+   pip install pyinstaller yt-dlp
+   ```
+
+2. Run the build script:
+   ```
