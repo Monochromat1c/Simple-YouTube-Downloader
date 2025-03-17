@@ -14,7 +14,7 @@ This project uses the following dependencies:
 1.  **Install Python packages:**
 
     ```bash
-    pip install yt-dlp
+    pip install yt-dlp requests bs4 pyinstaller
     ```
 
 2.  **Install ffmpeg (Optional):**
