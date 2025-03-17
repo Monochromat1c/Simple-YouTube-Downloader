@@ -5,7 +5,7 @@ a = Analysis(
     ['youtube_downloader.py'],
     pathex=[],
     binaries=[('C:\\Users\\Charles\\AppData\\Local\\Programs\\Python\\Python313\\Scripts\\yt-dlp.exe', '.')],
-    datas=[],
+    datas=[('assets\\icon\\icon.ico', 'assets/icon')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

@@ -36,6 +36,7 @@ def build_exe():
         '--windowed',
         f'--icon={icon_path}',
         f'--add-binary={ytdlp_path};.',
+        f'--add-data={icon_path};assets/icon',
         'youtube_downloader.py'
     ]
     

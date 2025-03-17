@@ -76,7 +76,7 @@ def download_button_clicked(root, url_entry, download_type, output_text, downloa
     output_text.insert(tk.END, "Download Success!\n")
     output_text.see(tk.END)
     root.update()
-    root.after(3000, lambda: (output_text.delete("1.0", tk.END), url_entry.delete(0, tk.END)))
+    root.after(2000, lambda: (output_text.delete("1.0", tk.END), url_entry.delete(0, tk.END)))
 
 def check_ffmpeg():
     """Check if FFmpeg is available in the system PATH"""
@@ -91,8 +91,38 @@ def create_gui():
     root = tk.Tk()
     root.title("YouTube Downloader")
     
-    # Make window stay on top
+    # Set window icon using sys._MEIPASS for PyInstaller
+    try:
+        import sys
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable
+            base_path = sys._MEIPASS
+        else:
+            # Running as script
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        
+        icon_path = os.path.join(base_path, 'assets', 'icon', 'icon.ico')
+        root.iconbitmap(icon_path)
+    except:
+        # If icon loading fails, continue without icon
+        pass
+    
+    # Make window stay on top and prevent resizing
     root.attributes('-topmost', True)
+    root.resizable(False, False)
+
+    # Change title bar color (Windows 11 only)
+    try:
+        from ctypes import windll, c_int, byref, sizeof
+        HWND = windll.user32.GetParent(root.winfo_id())
+        windll.dwmapi.DwmSetWindowAttribute(
+            HWND,
+            35,  # DWMWA_CAPTION_COLOR
+            byref(c_int(0x00382515)),  # RGB(21, 37, 56) -> BGR format
+            sizeof(c_int)
+        )
+    except:
+        pass  # Fail silently if not on Windows 11 or if it doesn't work
 
     # Check FFmpeg availability
     if not check_ffmpeg():
@@ -117,28 +147,35 @@ def create_gui():
                              command=lambda: select_directory(download_path_var))
     browse_button.pack(side=tk.RIGHT, padx=(5, 0))
 
+    # URL Entry and Download Button Frame
+    url_button_frame = ttk.Frame(root)
+    url_button_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
     # URL Entry
-    url_label = ttk.Label(root, text="YouTube URL:")
-    url_label.grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
-    url_entry = ttk.Entry(root, width=50)
-    url_entry.grid(row=1, column=1, padx=5, pady=5, sticky=tk.E)
-
-    # Download Type (Radio Buttons)
-    download_type = tk.IntVar(value=1)  # 1 for video, 2 for audio
-    video_radio = ttk.Radiobutton(root, text="Video", variable=download_type, value=1)
-    video_radio.grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
-    audio_radio = ttk.Radiobutton(root, text="Audio", variable=download_type, value=2)
-    audio_radio.grid(row=2, column=1, padx=5, pady=5, sticky=tk.W)
-
+    url_label = ttk.Label(url_button_frame, text="YouTube URL:")
+    url_label.pack(side=tk.LEFT, padx=(0, 5))
+    url_entry = ttk.Entry(url_button_frame, width=50)
+    url_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+    
     # Download Button
     download_button = ttk.Button(
-        root, 
-        text="Download", 
+        url_button_frame,
+        text="Download",
         command=lambda: download_button_clicked(
             root, url_entry, download_type, output_text, download_path_var
         )
     )
-    download_button.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+    download_button.pack(side=tk.LEFT, padx=(5,0))
+
+    # Download Type (Radio Buttons)
+    radio_frame = ttk.Frame(root)
+    radio_frame.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+    
+    download_type = tk.IntVar(value=1)  # 1 for video, 2 for audio
+    video_radio = ttk.Radiobutton(radio_frame, text="Video", variable=download_type, value=1)
+    video_radio.pack(side=tk.LEFT)
+    audio_radio = ttk.Radiobutton(radio_frame, text="Audio", variable=download_type, value=2)
+    audio_radio.pack(side=tk.LEFT, padx=(10, 0))  # 10 pixels space between radio buttons
 
     # Output Text Area
     output_text = scrolledtext.ScrolledText(root, width=60, height=10)
