@@ -71,7 +71,7 @@ To build the executable yourself:
 
 1. Install the required packages:
    ```bash
-   pip install pyinstaller yt-dlp
+   pip install pyinstaller yt-dlp requests bs4
    ```
 
 2. Run the build script:
