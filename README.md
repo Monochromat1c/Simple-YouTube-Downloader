@@ -75,4 +75,6 @@ To build the executable yourself:
    ```
 
 2. Run the build script:
+   ```bash
+   python build.py
    ```
