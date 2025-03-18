@@ -351,7 +351,24 @@ def download_button_clicked(root, url_entry, download_type, output_text, downloa
     output_text.insert(tk.END, "Download Success!\n")
     output_text.see(tk.END)
     root.update()
-    root.after(2000, lambda: (output_text.delete("1.0", tk.END), url_entry.delete(0, tk.END)))
+    
+    # Get reference to download button
+    download_button = None
+    for widget in url_entry.master.winfo_children():
+        if isinstance(widget, ttk.Button) and widget['text'] == 'Download':
+            download_button = widget
+            break
+            
+    # Clear everything after 2 seconds
+    def clear_all():
+        output_text.delete("1.0", tk.END)
+        url_entry.delete(0, tk.END)
+        res_dropdown['values'] = ["Auto (up to 1080p)"]
+        res_dropdown.set("Auto (up to 1080p)")
+        if download_button:
+            download_button.configure(state='disabled')
+            
+    root.after(2000, clear_all)
 
 def check_ffmpeg():
     """Check if FFmpeg is available in the system PATH"""
@@ -425,15 +442,18 @@ def create_gui():
     url_button_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
     # URL Entry
-    url_label = ttk.Label(url_button_frame, text="YouTube URL:")
+    url_label = ttk.Label(url_button_frame, text="Video URL:")
     url_label.pack(side=tk.LEFT, padx=(0, 5))
     url_entry = ttk.Entry(url_button_frame, width=50)
     url_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
     
-    # Progress Bar (added here)
-    progress_var = tk.DoubleVar()
-    progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=100)
-    progress_bar.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    # Check Button (new)
+    check_button = ttk.Button(
+        url_button_frame,
+        text="Check",
+        command=lambda: check_url(url_entry, res_dropdown, download_type, root)
+    )
+    check_button.pack(side=tk.LEFT, padx=(5,0))
 
     # Download Button
     download_button = ttk.Button(
@@ -441,9 +461,15 @@ def create_gui():
         text="Download",
         command=lambda: download_button_clicked(
             root, url_entry, download_type, output_text, download_path_var, progress_var, res_dropdown
-        )
+        ),
+        state="disabled"  # Disable button by default
     )
     download_button.pack(side=tk.LEFT, padx=(5,0))
+
+    # Progress Bar (added here)
+    progress_var = tk.DoubleVar()
+    progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=100)
+    progress_bar.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
     # Download Type (Radio Buttons)
     radio_frame = ttk.Frame(root)
@@ -462,19 +488,80 @@ def create_gui():
     res_label = ttk.Label(res_frame, text="Resolution:")
     res_label.pack(side=tk.LEFT, padx=(0, 5))
     
-    res_dropdown = ttk.Combobox(res_frame, width=15, state="readonly")
+    res_dropdown = ttk.Combobox(res_frame, width=20, state="readonly")
     res_dropdown['values'] = ["Auto (up to 1080p)"]
     res_dropdown.set("Auto (up to 1080p)")
     res_dropdown.pack(side=tk.LEFT)
 
-    # Bind URL entry changes
-    url_entry.bind('<KeyRelease>', lambda e: url_changed(e, url_entry, res_dropdown, download_type, root))
-
     # Output Text Area
-    output_text = scrolledtext.ScrolledText(root, width=60, height=10)
-    output_text.grid(row=4, column=0, columnspan=2, padx=5, pady=5)
+    output_text = scrolledtext.ScrolledText(root, height=10)
+    output_text.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
     root.mainloop()
+
+def check_url(url_entry, res_dropdown, download_type, root):
+    """Handle Check button click"""
+    url = url_entry.get()
+    
+    # Clear existing options
+    res_dropdown['values'] = []
+    res_dropdown.set('')
+    
+    # Get reference to download button
+    download_button = None
+    for widget in url_entry.master.winfo_children():
+        if isinstance(widget, ttk.Button) and widget['text'] == 'Download':
+            download_button = widget
+            break
+    
+    # Disable download button when starting new check
+    if download_button:
+        download_button.configure(state='disabled')
+    
+    if url.strip() and download_type.get() == 1:  # Only for video downloads with non-empty URL
+        loading = LoadingIndicator(root, "Fetching available formats")
+        result_queue = Queue()
+        
+        def fetch_formats():
+            get_available_formats(url, result_queue)
+            
+        def check_queue():
+            try:
+                if not result_queue.empty():
+                    status, data = result_queue.get()
+                    loading.destroy()
+                    
+                    if status == 'success':
+                        formats = data
+                        if formats:
+                            # Add "Auto (up to 1080p)" option at the beginning
+                            formats = [("Auto (up to 1080p)", "")] + formats
+                            # Update dropdown values
+                            res_dropdown['values'] = [f[0] for f in formats]
+                            res_dropdown.format_ids = {f[0]: f[1] for f in formats}
+                            res_dropdown.set("Auto (up to 1080p)")
+                            # Enable download button on successful fetch
+                            if download_button:
+                                download_button.configure(state='normal')
+                        else:
+                            res_dropdown['values'] = ["Auto (up to 1080p)"]
+                            res_dropdown.set("Auto (up to 1080p)")
+                    else:
+                        messagebox.showerror("Error", f"Failed to fetch formats: {data}")
+                        res_dropdown['values'] = ["Auto (up to 1080p)"]
+                        res_dropdown.set("Auto (up to 1080p)")
+                else:
+                    root.after(100, check_queue)
+            except tk.TkError:
+                # Handle case where window was closed during loading
+                pass
+                
+        # Start the background thread
+        thread = threading.Thread(target=fetch_formats, daemon=True)
+        thread.start()
+        
+        # Start checking for results
+        root.after(100, check_queue)
 
 if __name__ == "__main__":
     create_gui()
