@@ -1,6 +1,6 @@
-# YouTube Downloader
+# Video Downloader
 
-This script allows you to download YouTube videos and audio.
+This script allows you to download videos and audios from websites.
 
 ## Dependencies
 
@@ -62,7 +62,7 @@ python youtube_downloader.py
 3. Run the executable file
 
 The application will provide a simple GUI where you can:
-- Enter a YouTube URL
+- Enter a video URL
 - Choose between video or audio download
 - Click Download to start the process
 
