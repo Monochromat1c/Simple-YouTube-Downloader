@@ -8,15 +8,162 @@ from tkinter import ttk, scrolledtext, messagebox, filedialog
 import time
 import os
 from typing import List, Tuple
+import threading
+from queue import Queue
 
 def get_downloads_folder():
     """Get the default downloads folder path"""
     return os.path.join(os.path.expanduser("~"), "Downloads")
 
-def get_available_formats(video_url) -> List[Tuple[str, str]]:
+class LoadingIndicator:
+    def __init__(self, parent, text="Loading..."):
+        # Create a transparent overlay window instead of a frame
+        self.overlay = tk.Toplevel(parent)
+        self.overlay.withdraw()  # Hide initially to prevent flicker
+        
+        # Remove window decorations
+        self.overlay.overrideredirect(True)
+        self.overlay.attributes('-topmost', True)
+        self.overlay.attributes('-alpha', 0.3)  # 30% opacity
+        
+        # Configure background
+        self.overlay.configure(bg='gray')
+        
+        # Function to update overlay position and size
+        def update_overlay():
+            x = parent.winfo_rootx()
+            y = parent.winfo_rooty()
+            w = parent.winfo_width()
+            h = parent.winfo_height()
+            self.overlay.geometry(f"{w}x{h}+{x}+{y}")
+        
+        # Update position initially
+        parent.update_idletasks()  # Ensure parent geometry is up to date
+        update_overlay()
+        
+        # Bind to parent movement to keep overlay aligned
+        parent.bind('<Configure>', lambda e: update_overlay())
+        
+        # Show the overlay
+        self.overlay.deiconify()
+        self.overlay.lift()
+        
+        self.parent = parent
+        self.window = tk.Toplevel(parent)
+        self.window.overrideredirect(True)
+        self.window.attributes('-topmost', True)
+        
+        # Configure border and background
+        self.window.configure(bg='black')  # Border color
+        
+        # Create inner frame for content with margin (acting as border)
+        self.border_frame = tk.Frame(self.window, bg='#f0f0f0', padx=1, pady=1)
+        self.border_frame.pack(expand=True, fill='both', padx=1, pady=1)
+        
+        # Make window size fixed
+        self.window.grid_propagate(False)
+        self.window.geometry("400x80")
+        
+        # Store original position
+        self.parent_x = parent.winfo_x()
+        self.parent_y = parent.winfo_y()
+        
+        # Disable parent window movement
+        self.parent.bind('<Configure>', lambda e: self.prevent_move(e))
+        
+        # Center the window
+        self.center_window()
+        
+        # Create main frame
+        self.frame = ttk.Frame(self.border_frame)
+        self.frame.place(relx=0.5, rely=0.5, anchor="center")
+        
+        # Add loading text
+        self.label = ttk.Label(
+            self.frame,
+            text="Fetching available resolution. Please wait.",
+            font=('Segoe UI', 10)
+        )
+        self.label.pack(pady=(0, 10))
+        
+        # Create canvas for spinner
+        self.canvas = tk.Canvas(
+            self.frame,
+            width=30,
+            height=30,
+            bg='#f0f0f0',
+            highlightthickness=0
+        )
+        self.canvas.pack()
+        
+        # Create spinner circle
+        self.spinner = self.canvas.create_arc(
+            5, 5, 25, 25,
+            start=0,
+            extent=300,
+            width=2,
+            style=tk.ARC,
+            outline='black'
+        )
+        
+        # Add rounded corners (Windows only)
+        try:
+            from ctypes import windll, byref, sizeof, c_int
+            HWND = windll.user32.GetParent(self.window.winfo_id())
+            windll.dwmapi.DwmSetWindowAttribute(
+                HWND,
+                33,  # DWMWA_WINDOW_CORNER_PREFERENCE
+                byref(c_int(2)),  # DWMWCP_ROUND
+                sizeof(c_int)
+            )
+        except:
+            pass
+        
+        self.window.lift()
+        self.angle = 0
+        self.animate_spinner()
+    
+    def center_window(self):
+        """Center the loading window relative to parent"""
+        parent_x = self.parent.winfo_x()
+        parent_y = self.parent.winfo_y()
+        parent_width = self.parent.winfo_width()
+        parent_height = self.parent.winfo_height()
+        
+        x = parent_x + (parent_width - 400) // 2
+        y = parent_y + (parent_height - 80) // 2
+        
+        self.window.geometry(f"+{x}+{y}")
+    
+    def prevent_move(self, event):
+        """Prevent parent window from moving"""
+        if event.widget == self.parent:
+            self.parent.geometry(f'+{self.parent_x}+{self.parent_y}')
+    
+    def animate_spinner(self):
+        """Animate the spinning loader"""
+        self.angle = (self.angle + 10) % 360
+        self.canvas.itemconfig(
+            self.spinner,
+            start=self.angle
+        )
+        self.animation_id = self.window.after(20, self.animate_spinner)
+        
+    def destroy(self):
+        """Clean up and destroy the window"""
+        if hasattr(self, 'animation_id'):
+            self.window.after_cancel(self.animation_id)
+        # Unbind parent events
+        self.parent.unbind('<Configure>')
+        self.parent.unbind('<Unmap>')
+        self.parent.unbind('<Map>')
+        # Just remove the overlay
+        self.overlay.destroy()
+        self.window.destroy()
+
+def get_available_formats(video_url, result_queue: Queue) -> List[Tuple[str, str]]:
     """Gets available MP4 video formats and returns list of (resolution, format_id) tuples"""
     try:
-        # Add startupinfo to hide console window
         startupinfo = None
         if os.name == 'nt':
             startupinfo = subprocess.STARTUPINFO()
@@ -36,7 +183,6 @@ def get_available_formats(video_url) -> List[Tuple[str, str]]:
         formats = []
         seen_resolutions = set()
         
-        # Get all MP4 video formats
         for fmt in video_info.get('formats', []):
             if fmt.get('ext') == 'mp4' and fmt.get('vcodec') != 'none':
                 height = fmt.get('height')
@@ -44,13 +190,11 @@ def get_available_formats(video_url) -> List[Tuple[str, str]]:
                     seen_resolutions.add(height)
                     formats.append((f"{height}p", fmt['format_id']))
         
-        # Sort by resolution (highest first)
         formats.sort(key=lambda x: int(x[0][:-1]), reverse=True)
-        return formats
+        result_queue.put(('success', formats))
     
     except Exception as e:
-        print(f"Error getting formats: {e}")
-        return []
+        result_queue.put(('error', str(e)))
 
 def download_video(video_url, download_type, output_callback, download_path, update_progress_callback, resolution_id=None):
     """Downloads the video, updates progress, and sends output to callback."""
@@ -129,24 +273,52 @@ def select_directory(current_path_var):
 def url_changed(event, url_entry, res_dropdown, download_type, root):
     """Handle URL entry changes"""
     url = url_entry.get()
-    if url.strip():
-        # Clear existing options
-        res_dropdown['values'] = []
-        res_dropdown.set('')
+    
+    # Clear existing options
+    res_dropdown['values'] = []
+    res_dropdown.set('')
+    
+    if url.strip() and download_type.get() == 1:  # Only for video downloads with non-empty URL
+        loading = LoadingIndicator(root, "Fetching available formats")
+        result_queue = Queue()
         
-        if download_type.get() == 1:  # Only for video downloads
-            # Get available formats
-            formats = get_available_formats(url)
-            if formats:
-                # Add "Auto (up to 1080p)" option at the beginning
-                formats = [("Auto (up to 1080p)", "")] + formats
-                # Update dropdown values
-                res_dropdown['values'] = [f[0] for f in formats]
-                res_dropdown.format_ids = {f[0]: f[1] for f in formats}
-                res_dropdown.set("Auto (up to 1080p)")
-            else:
-                res_dropdown['values'] = ["Auto (up to 1080p)"]
-                res_dropdown.set("Auto (up to 1080p)")
+        def fetch_formats():
+            get_available_formats(url, result_queue)
+            
+        def check_queue():
+            try:
+                if not result_queue.empty():
+                    status, data = result_queue.get()
+                    loading.destroy()
+                    
+                    if status == 'success':
+                        formats = data
+                        if formats:
+                            # Add "Auto (up to 1080p)" option at the beginning
+                            formats = [("Auto (up to 1080p)", "")] + formats
+                            # Update dropdown values
+                            res_dropdown['values'] = [f[0] for f in formats]
+                            res_dropdown.format_ids = {f[0]: f[1] for f in formats}
+                            res_dropdown.set("Auto (up to 1080p)")
+                        else:
+                            res_dropdown['values'] = ["Auto (up to 1080p)"]
+                            res_dropdown.set("Auto (up to 1080p)")
+                    else:
+                        messagebox.showerror("Error", f"Failed to fetch formats: {data}")
+                        res_dropdown['values'] = ["Auto (up to 1080p)"]
+                        res_dropdown.set("Auto (up to 1080p)")
+                else:
+                    root.after(100, check_queue)
+            except tk.TkError:
+                # Handle case where window was closed during loading
+                pass
+                
+        # Start the background thread
+        thread = threading.Thread(target=fetch_formats, daemon=True)
+        thread.start()
+        
+        # Start checking for results
+        root.after(100, check_queue)
 
 def download_button_clicked(root, url_entry, download_type, output_text, download_path_var, progress_var, res_dropdown):
     """Handles download button, updates progress, and manages output."""
@@ -194,6 +366,8 @@ def create_gui():
     root = tk.Tk()
     root.title("YouTube Downloader")
     
+    root.resizable(False, False)  # Keep this
+    
     # Set window icon using sys._MEIPASS for PyInstaller
     try:
         import sys
@@ -210,10 +384,6 @@ def create_gui():
         # If icon loading fails, continue without icon
         pass
     
-    # Make window stay on top and prevent resizing
-    # root.attributes('-topmost', True)
-    root.resizable(False, False)
-
     # Change title bar color (Windows 11 only)
     try:
         from ctypes import windll, c_int, byref, sizeof
