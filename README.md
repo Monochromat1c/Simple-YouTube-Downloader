@@ -81,10 +81,13 @@ To build the executable yourself:
 
 ## Antivirus Warning
 
-Some browsers or antivirus software may flag the downloaded executable as suspicious. This is a false positive due to how Python executables are packaged. You can:
+Some browsers or antivirus software may flag the downloaded executable as suspicious. This is a false positive due to how PyInstaller packages Python applications into executables. PyInstaller bundles Python code and dependencies into a single executable file, which can trigger antivirus heuristic detection patterns.
+
+These false positives are common for PyInstaller-generated executables and do not indicate actual malware. To verify the safety of the application, you can:
 
 1. Verify the executable on [VirusTotal](https://www.virustotal.com)
 2. Download the source code and build it yourself
 3. Add an exception in your antivirus software
+4. Compare the file hash with the one provided in our releases
 
-The application is open-source, and you can review all the code in this repository.
+The application is open-source, and you can review all the code in this repository. If you're concerned about security, we recommend building the executable yourself from the source code.
