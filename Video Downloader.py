@@ -208,6 +208,16 @@ def get_available_formats(video_url, result_queue: Queue, format_type='v') -> Li
             
         video_info = json.loads(result.stdout)
         
+        # Extract video metadata
+        metadata = {
+            'title': video_info.get('title', 'Unknown'),
+            'duration': video_info.get('duration', 0),
+            'uploader': video_info.get('uploader', 'Unknown'),
+            'view_count': video_info.get('view_count', 0),
+            'upload_date': video_info.get('upload_date', 'Unknown'),
+            'description': video_info.get('description', '').split('\n')[0]  # First line only
+        }
+        
         formats = []
         seen_qualities = set()
         
@@ -244,7 +254,7 @@ def get_available_formats(video_url, result_queue: Queue, format_type='v') -> Li
             # Sort audio by bitrate/frequency (removing 'kbps' or 'kHz' and converting to int)
             formats.sort(key=lambda x: int(x[0][:-4]), reverse=True)
             
-        result_queue.put(('success', formats))
+        result_queue.put(('success', (formats, metadata)))  # Now sending both formats and metadata
     
     except json.JSONDecodeError:
         result_queue.put(('error', "Failed to parse video information"))
@@ -269,15 +279,20 @@ def download_video(video_url, download_type, output_callback, download_path, upd
         output_callback("Invalid download type.\n")
         return
 
-    # Create output template with download path
+    # Create output template with automatic numbering for conflicts
     output_template = os.path.join(download_path, "%(title)s.%(ext)s")
-
+    
     command = [
         "yt-dlp",
         "-f", format_arg,
         format_sort_arg,
         "--no-playlist",
         "-o", output_template,
+        # Add these options to handle duplicates
+        "--force-overwrites",  # Required for the next option to work
+        "--output-na-placeholder", "",  # Handles special characters in filenames
+        "--paths", "home:" + download_path,  # Set download path
+        "--restrict-filenames",  # Restrict filenames to ASCII characters
         video_url
     ]
 
@@ -350,7 +365,7 @@ def url_changed(event, url_entry, res_dropdown, download_type, root):
                     loading.destroy()
                     
                     if status == 'success':
-                        formats = data
+                        formats, metadata = data
                         if formats:
                             # Add "Auto (up to 1080p)" option at the beginning
                             formats = [("Auto (up to 1080p)", "")] + formats
@@ -627,7 +642,7 @@ def check_url(url_entry, res_dropdown, download_type, root, output_text):
                     loading.destroy()
                     
                     if status == 'success':
-                        formats = data
+                        formats, metadata = data
                         if formats:
                             # Add auto option at beginning
                             auto_text = "Auto (up to 1080p only)" if format_type == 'v' else "Auto (best quality)"
@@ -640,14 +655,37 @@ def check_url(url_entry, res_dropdown, download_type, root, output_text):
                             if download_button:
                                 download_button.configure(state='normal')
                             
-                            # Display success message
+                            # Format and display video information
                             if output_text:
                                 output_text.configure(state="normal")
-                                output_text.delete("1.0", tk.END)  # Clear existing text
-                                output_text.insert(tk.END, f"Successfully fetched {len(formats)-1} available {'video' if format_type == 'v' else 'audio'} formats.\n")
-                                output_text.see(tk.END)  # Make sure text is visible
+                                output_text.delete("1.0", tk.END)
+                                
+                                # Format duration
+                                duration_mins = metadata['duration'] // 60
+                                duration_secs = metadata['duration'] % 60
+                                
+                                # Format date
+                                upload_date = metadata['upload_date']
+                                if upload_date != 'Unknown':
+                                    upload_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}"
+                                
+                                # Format view count with commas
+                                view_count = f"{metadata['view_count']:,}" if metadata['view_count'] else 'Unknown'
+                                
+                                info_text = (
+                                    f"Title: {metadata['title']}\n"
+                                    f"Duration: {duration_mins}:{duration_secs:02d}\n"
+                                    f"Uploader: {metadata['uploader']}\n"
+                                    f"Views: {view_count}\n"
+                                    f"Upload Date: {upload_date}\n"
+                                    f"Description: {metadata['description']}\n"
+                                    f"\nAvailable {'video' if format_type == 'v' else 'audio'} formats: {len(formats)-1}\n"
+                                )
+                                
+                                output_text.insert(tk.END, info_text)
+                                output_text.see(tk.END)
                                 output_text.configure(state="disabled")
-                                root.update()  # Force update of display
+                                root.update()
                         else:
                             default_text = "Auto (up to 1080p only)" if format_type == 'v' else "Auto (best quality)"
                             res_dropdown['values'] = [default_text]
