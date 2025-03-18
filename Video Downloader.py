@@ -364,7 +364,7 @@ def check_ffmpeg():
 def create_gui():
     """Creates the Tkinter GUI."""
     root = tk.Tk()
-    root.title("YouTube Downloader")
+    root.title("Video Downloader")
     
     root.resizable(False, False)  # Keep this
     

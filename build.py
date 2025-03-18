@@ -40,7 +40,7 @@ def build_exe():
         '--clean',
         '--noupx',
         '--disable-windowed-traceback',
-        'youtube_downloader.py'
+        'Video Downloader.py'
     ]
     
     print(f"Building with yt-dlp from: {ytdlp_path}")
