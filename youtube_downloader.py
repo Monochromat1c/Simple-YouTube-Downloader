@@ -12,8 +12,8 @@ def get_downloads_folder():
     """Get the default downloads folder path"""
     return os.path.join(os.path.expanduser("~"), "Downloads")
 
-def download_video(video_url, download_type, output_callback, download_path):
-    """Downloads the video from the given URL using yt-dlp."""
+def download_video(video_url, download_type, output_callback, download_path, update_progress_callback):
+    """Downloads the video, updates progress, and sends output to callback."""
     if download_type == 'v':
         format_arg = 'bv*[ext=mp4][height<=1080]+ba/b[ext=mp4]'
         format_sort_arg = '-S ext:webm:none'
@@ -37,20 +37,45 @@ def download_video(video_url, download_type, output_callback, download_path):
     ]
 
     try:
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        
+        # Add startupinfo to hide console window
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            startupinfo=startupinfo
+        )
+
         while True:
             output = process.stdout.readline()
             if output == '' and process.poll() is not None:
                 break
             if output:
-                output_callback(output)
+                # Extract percentage using regex
+                match = re.search(r'\[download\]\s+([\d.]+)%', output)
+                if match:
+                    try:
+                        percentage = float(match.group(1))
+                        update_progress_callback(percentage)  # Update progress bar
+                    except ValueError:
+                        pass  # Ignore if parsing fails
+                output_callback(output) # Still output to scrolled text
+
         _, stderr = process.communicate()
         if stderr:
             output_callback(stderr)
 
+
     except subprocess.CalledProcessError as e:
         output_callback(f"Error downloading video:\n{e.stderr}\n")
+    except Exception as e:
+        output_callback(f"An unexpected error occurred: {e}\n")
 
 def select_directory(current_path_var):
     """Open directory selection dialog"""
@@ -58,21 +83,26 @@ def select_directory(current_path_var):
     if dir_path:  # If a directory was selected
         current_path_var.set(dir_path)
 
-def download_button_clicked(root, url_entry, download_type, output_text, download_path_var):
-    """Handles the download button click event."""
+def download_button_clicked(root, url_entry, download_type, output_text, download_path_var, progress_var):
+    """Handles download button, updates progress, and manages output."""
     video_url = url_entry.get()
     download_type_str = 'v' if download_type.get() == 1 else 'a'
     output_text.insert(tk.END, f"Downloading to: {download_path_var.get()}\n")
     output_text.insert(tk.END, f"Downloading: {video_url}\n")
     output_text.see(tk.END)
     root.update()
-    
+
     def update_output(text):
         output_text.insert(tk.END, text)
         output_text.see(tk.END)
         root.update()
 
-    download_video(video_url, download_type_str, update_output, download_path_var.get())
+    def update_progress(percentage):
+        progress_var.set(percentage)
+        root.update_idletasks()  # Important for smooth progress bar updates
+
+    download_video(video_url, download_type_str, update_output, download_path_var.get(), update_progress)
+    progress_var.set(0)  # Reset progress bar
     output_text.insert(tk.END, "Download Success!\n")
     output_text.see(tk.END)
     root.update()
@@ -108,7 +138,7 @@ def create_gui():
         pass
     
     # Make window stay on top and prevent resizing
-    root.attributes('-topmost', True)
+    # root.attributes('-topmost', True)
     root.resizable(False, False)
 
     # Change title bar color (Windows 11 only)
@@ -157,12 +187,17 @@ def create_gui():
     url_entry = ttk.Entry(url_button_frame, width=50)
     url_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
     
+    # Progress Bar (added here)
+    progress_var = tk.DoubleVar()
+    progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=100)
+    progress_bar.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+
     # Download Button
     download_button = ttk.Button(
         url_button_frame,
         text="Download",
         command=lambda: download_button_clicked(
-            root, url_entry, download_type, output_text, download_path_var
+            root, url_entry, download_type, output_text, download_path_var, progress_var
         )
     )
     download_button.pack(side=tk.LEFT, padx=(5,0))
