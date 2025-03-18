@@ -161,8 +161,8 @@ class LoadingIndicator:
         self.overlay.destroy()
         self.window.destroy()
 
-def get_available_formats(video_url, result_queue: Queue) -> List[Tuple[str, str]]:
-    """Gets available MP4 video formats and returns list of (resolution, format_id) tuples"""
+def get_available_formats(video_url, result_queue: Queue, format_type='v') -> List[Tuple[str, str]]:
+    """Gets available formats and returns list of (quality, format_id) tuples"""
     try:
         startupinfo = None
         if os.name == 'nt':
@@ -181,16 +181,41 @@ def get_available_formats(video_url, result_queue: Queue) -> List[Tuple[str, str
         video_info = json.loads(result.stdout)
         
         formats = []
-        seen_resolutions = set()
+        seen_qualities = set()
         
         for fmt in video_info.get('formats', []):
-            if fmt.get('ext') == 'mp4' and fmt.get('vcodec') != 'none':
-                height = fmt.get('height')
-                if height and height not in seen_resolutions:
-                    seen_resolutions.add(height)
-                    formats.append((f"{height}p", fmt['format_id']))
+            if format_type == 'v':
+                if fmt.get('ext') == 'mp4' and fmt.get('vcodec') != 'none':
+                    height = fmt.get('height')
+                    if height and height not in seen_qualities:
+                        seen_qualities.add(height)
+                        formats.append((f"{height}p", fmt['format_id']))
+            else:  # audio formats
+                # Check for audio-only formats or formats with audio
+                if fmt.get('acodec') != 'none':
+                    # Get audio quality indicators
+                    abr = fmt.get('abr', 0)  # audio bitrate
+                    asr = fmt.get('asr', 0)  # audio sample rate
+                    
+                    # Create quality string
+                    quality = ""
+                    if abr:
+                        quality = f"{int(abr)}kbps"
+                    elif asr:
+                        quality = f"{int(asr/1000)}kHz"
+                    else:
+                        continue  # Skip if no quality info
+                        
+                    if quality and quality not in seen_qualities:
+                        seen_qualities.add(quality)
+                        formats.append((quality, fmt['format_id']))
         
-        formats.sort(key=lambda x: int(x[0][:-1]), reverse=True)
+        if format_type == 'v':
+            formats.sort(key=lambda x: int(x[0][:-1]), reverse=True)  # Sort video by height
+        else:
+            # Sort audio by bitrate/frequency (removing 'kbps' or 'kHz' and converting to int)
+            formats.sort(key=lambda x: int(x[0][:-4]), reverse=True)
+            
         result_queue.put(('success', formats))
     
     except Exception as e:
@@ -510,10 +535,16 @@ def create_gui():
 def check_url(url_entry, res_dropdown, download_type, root):
     """Handle Check button click"""
     url = url_entry.get()
+    format_type = 'v' if download_type.get() == 1 else 'a'
     
     # Clear existing options
     res_dropdown['values'] = []
     res_dropdown.set('')
+    
+    # Update resolution label based on format type
+    for widget in res_dropdown.master.winfo_children():
+        if isinstance(widget, ttk.Label):
+            widget.configure(text="Resolution:" if format_type == 'v' else "Quality:")
     
     # Get reference to download button
     download_button = None
@@ -526,12 +557,12 @@ def check_url(url_entry, res_dropdown, download_type, root):
     if download_button:
         download_button.configure(state='disabled')
     
-    if url.strip() and download_type.get() == 1:  # Only for video downloads with non-empty URL
+    if url.strip():  # Check URL for both video and audio
         loading = LoadingIndicator(root, "Fetching available formats")
         result_queue = Queue()
         
         def fetch_formats():
-            get_available_formats(url, result_queue)
+            get_available_formats(url, result_queue, format_type)
             
         def check_queue():
             try:
@@ -542,22 +573,25 @@ def check_url(url_entry, res_dropdown, download_type, root):
                     if status == 'success':
                         formats = data
                         if formats:
-                            # Add "Auto (up to 1080p)" option at the beginning
-                            formats = [("Auto (up to 1080p only)", "")] + formats
+                            # Add auto option at beginning
+                            auto_text = "Auto (up to 1080p only)" if format_type == 'v' else "Auto (best quality)"
+                            formats = [(auto_text, "")] + formats
                             # Update dropdown values
                             res_dropdown['values'] = [f[0] for f in formats]
                             res_dropdown.format_ids = {f[0]: f[1] for f in formats}
-                            res_dropdown.set("Auto (up to 1080p only)")
+                            res_dropdown.set(auto_text)
                             # Enable download button on successful fetch
                             if download_button:
                                 download_button.configure(state='normal')
                         else:
-                            res_dropdown['values'] = ["Auto (up to 1080p only)"]
-                            res_dropdown.set("Auto (up to 1080p only)")
+                            default_text = "Auto (up to 1080p only)" if format_type == 'v' else "Auto (best quality)"
+                            res_dropdown['values'] = [default_text]
+                            res_dropdown.set(default_text)
                     else:
                         messagebox.showerror("Error", f"Failed to fetch formats: {data}")
-                        res_dropdown['values'] = ["Auto (up to 1080p only)"]
-                        res_dropdown.set("Auto (up to 1080p only)")
+                        default_text = "Auto (up to 1080p only)" if format_type == 'v' else "Auto (best quality)"
+                        res_dropdown['values'] = [default_text]
+                        res_dropdown.set(default_text)
                 else:
                     root.after(100, check_queue)
             except tk.TkError:
