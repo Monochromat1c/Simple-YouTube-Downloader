@@ -37,6 +37,9 @@ def build_exe():
         f'--icon={icon_path}',
         f'--add-binary={ytdlp_path};.',
         f'--add-data={icon_path};assets/icon',
+        '--clean',
+        '--noupx',
+        '--disable-windowed-traceback',
         'youtube_downloader.py'
     ]
     

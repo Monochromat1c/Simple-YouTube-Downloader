@@ -14,7 +14,7 @@ This project uses the following dependencies:
 1.  **Install Python packages:**
 
     ```bash
-    pip install yt-dlp
+    pip install yt-dlp requests bs4 pyinstaller
     ```
 
 2.  **Install ffmpeg (Optional):**
@@ -71,10 +71,20 @@ To build the executable yourself:
 
 1. Install the required packages:
    ```bash
-   pip install pyinstaller yt-dlp
+   pip install pyinstaller yt-dlp requests bs4
    ```
 
 2. Run the build script:
    ```bash
    python build.py
    ```
+
+## Antivirus Warning
+
+Some browsers or antivirus software may flag the downloaded executable as suspicious. This is a false positive due to how Python executables are packaged. You can:
+
+1. Verify the executable on [VirusTotal](https://www.virustotal.com)
+2. Download the source code and build it yourself
+3. Add an exception in your antivirus software
+
+The application is open-source, and you can review all the code in this repository.
