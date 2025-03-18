@@ -509,9 +509,32 @@ def create_gui():
     radio_frame.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="w")
     
     download_type = tk.IntVar(value=1)  # 1 for video, 2 for audio
-    video_radio = ttk.Radiobutton(radio_frame, text="Video", variable=download_type, value=1)
+    
+    # Add radio button callback
+    def on_radio_change():
+        is_video = download_type.get() == 1
+        default_text = "Auto (up to 1080p only)" if is_video else "Auto (best quality)"
+        # Update dropdown text
+        res_dropdown['values'] = [default_text]
+        res_dropdown.set(default_text)
+        # Update label text
+        res_label.configure(text="Resolution:" if is_video else "Quality:")
+        
+        # Reset download button state
+        for widget in url_entry.master.winfo_children():
+            if isinstance(widget, ttk.Button) and widget['text'] == 'Download':
+                widget.configure(state='disabled')
+                break
+        
+        # Clear format IDs if they exist
+        if hasattr(res_dropdown, 'format_ids'):
+            delattr(res_dropdown, 'format_ids')
+    
+    video_radio = ttk.Radiobutton(radio_frame, text="Video", variable=download_type, value=1, 
+                                 command=on_radio_change)
     video_radio.pack(side=tk.LEFT)
-    audio_radio = ttk.Radiobutton(radio_frame, text="Audio", variable=download_type, value=2)
+    audio_radio = ttk.Radiobutton(radio_frame, text="Audio", variable=download_type, value=2,
+                                 command=on_radio_change)
     audio_radio.pack(side=tk.LEFT, padx=(10, 0))  # 10 pixels space between radio buttons
 
     # Add Resolution Dropdown after radio buttons
@@ -522,7 +545,7 @@ def create_gui():
     res_label.pack(side=tk.LEFT, padx=(0, 5))
     
     res_dropdown = ttk.Combobox(res_frame, width=20, state="readonly")
-    res_dropdown['values'] = ["Auto (up to 1080p only)"]
+    res_dropdown['values'] = ["Auto (up to 1080p only)"]  # Default for video
     res_dropdown.set("Auto (up to 1080p only)")
     res_dropdown.pack(side=tk.LEFT)
 
