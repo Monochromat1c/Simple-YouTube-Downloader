@@ -14,7 +14,7 @@ This project uses the following dependencies:
 1.  **Install Python packages:**
 
     ```bash
-    pip install yt-dlp requests bs4 nuitka
+    pip install yt-dlp requests bs4 pyinstaller
     ```
 
 2.  **Install ffmpeg (Optional):**
@@ -71,29 +71,23 @@ To build the executable yourself:
 
 1. Install the required packages:
    ```bash
-   python -m pip install nuitka yt-dlp requests bs4
+   pip install pyinstaller yt-dlp requests bs4
    ```
 
-2. Run the build command:
+2. Run the build script:
    ```bash
-   python -m nuitka --onefile --enable-plugin=tk-inter "Video Downloader.py"
+   python build.py
    ```
 
-   This command will:
-   - Create a single executable file (--onefile)
-   - Include the necessary Tkinter dependencies (--enable-plugin=tk-inter)
-   - Generate the executable in the output directory
+## Antivirus Warning
 
-The executable will be generated using Nuitka, which creates more efficient and reliable executables compared to other Python compilers. Nuitka compiles Python code directly to standalone executables, resulting in better performance and fewer false positives from antivirus software.
+Some browsers or antivirus software may flag the downloaded executable as suspicious. This is a false positive due to how PyInstaller packages Python applications into executables. PyInstaller bundles Python code and dependencies into a single executable file, which can trigger antivirus heuristic detection patterns.
 
-## Note About Executables
+These false positives are common for PyInstaller-generated executables and do not indicate actual malware. To verify the safety of the application, you can:
 
-The application executable is built using Nuitka, a Python compiler that converts Python code into standalone executables. Unlike other packaging methods, Nuitka-generated executables are less likely to trigger false positives in antivirus software while providing better performance.
+1. Verify the executable on [VirusTotal](https://www.virustotal.com)
+2. Download the source code and build it yourself
+3. Add an exception in your antivirus software
+4. Compare the file hash with the one provided in our releases
 
-If you prefer to verify the safety of the application, you can:
-
-1. Download the source code and build it yourself
-2. Compare the file hash with the one provided in our releases
-3. Verify the executable on [VirusTotal](https://www.virustotal.com)
-
-The application is open-source, and you can review all the code in this repository.
+The application is open-source, and you can review all the code in this repository. If you're concerned about security, we recommend building the executable yourself from the source code.
