@@ -164,6 +164,12 @@ class LoadingIndicator:
 def get_available_formats(video_url, result_queue: Queue, format_type='v') -> List[Tuple[str, str]]:
     """Gets available formats and returns list of (quality, format_id) tuples"""
     try:
+        # Basic YouTube URL validation
+        if 'youtube.com' in video_url or 'youtu.be' in video_url:
+            if not re.match(r'(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/)[a-zA-Z0-9_-]+', video_url):
+                result_queue.put(('error', "Invalid YouTube URL format"))
+                return
+        
         startupinfo = None
         if os.name == 'nt':
             startupinfo = subprocess.STARTUPINFO()
@@ -178,6 +184,28 @@ def get_available_formats(video_url, result_queue: Queue, format_type='v') -> Li
         ]
         
         result = subprocess.run(command, capture_output=True, text=True, startupinfo=startupinfo)
+        
+        # Check for errors in stderr
+        if result.stderr:
+            error_msg = result.stderr
+            if "Video unavailable" in error_msg:
+                error_msg = "This video is unavailable or private"
+            elif "Unsupported URL" in error_msg:
+                error_msg = "Invalid URL or unsupported platform"
+            elif "Sign in to confirm your age" in error_msg:
+                error_msg = "Age-restricted video"
+            elif "Requested format is not available" in error_msg:
+                error_msg = "The requested video format is not available"
+            elif "Unable to extract video data" in error_msg:
+                error_msg = "Unable to find video. Please check the URL"
+            result_queue.put(('error', error_msg))
+            return
+
+        # If no output, URL is invalid
+        if not result.stdout.strip():
+            result_queue.put(('error', "Invalid URL or no video found"))
+            return
+            
         video_info = json.loads(result.stdout)
         
         formats = []
@@ -218,8 +246,13 @@ def get_available_formats(video_url, result_queue: Queue, format_type='v') -> Li
             
         result_queue.put(('success', formats))
     
+    except json.JSONDecodeError:
+        result_queue.put(('error', "Failed to parse video information"))
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr if e.stderr else "Failed to fetch video information"
+        result_queue.put(('error', error_msg))
     except Exception as e:
-        result_queue.put(('error', str(e)))
+        result_queue.put(('error', f"An unexpected error occurred: {str(e)}"))
 
 def download_video(video_url, download_type, output_callback, download_path, update_progress_callback, resolution_id=None):
     """Downloads the video, updates progress, and sends output to callback."""
@@ -484,7 +517,7 @@ def create_gui():
     check_button = ttk.Button(
         url_button_frame,
         text="Check",
-        command=lambda: check_url(url_entry, res_dropdown, download_type, root)
+        command=lambda: check_url(url_entry, res_dropdown, download_type, root, output_text)
     )
     check_button.pack(side=tk.LEFT, padx=(5,0))
 
@@ -555,7 +588,7 @@ def create_gui():
 
     root.mainloop()
 
-def check_url(url_entry, res_dropdown, download_type, root):
+def check_url(url_entry, res_dropdown, download_type, root, output_text):
     """Handle Check button click"""
     url = url_entry.get()
     format_type = 'v' if download_type.get() == 1 else 'a'
@@ -606,15 +639,40 @@ def check_url(url_entry, res_dropdown, download_type, root):
                             # Enable download button on successful fetch
                             if download_button:
                                 download_button.configure(state='normal')
+                            
+                            # Display success message
+                            if output_text:
+                                output_text.configure(state="normal")
+                                output_text.delete("1.0", tk.END)  # Clear existing text
+                                output_text.insert(tk.END, f"Successfully fetched {len(formats)-1} available {'video' if format_type == 'v' else 'audio'} formats.\n")
+                                output_text.see(tk.END)  # Make sure text is visible
+                                output_text.configure(state="disabled")
+                                root.update()  # Force update of display
                         else:
                             default_text = "Auto (up to 1080p only)" if format_type == 'v' else "Auto (best quality)"
                             res_dropdown['values'] = [default_text]
                             res_dropdown.set(default_text)
+                            # Display no formats message
+                            if output_text:
+                                output_text.configure(state="normal")
+                                output_text.delete("1.0", tk.END)  # Clear existing text
+                                output_text.insert(tk.END, f"No {'video' if format_type == 'v' else 'audio'} formats found for this URL.\n")
+                                output_text.see(tk.END)  # Make sure text is visible
+                                output_text.configure(state="disabled")
+                                root.update()  # Force update of display
                     else:
                         messagebox.showerror("Error", f"Failed to fetch formats: {data}")
                         default_text = "Auto (up to 1080p only)" if format_type == 'v' else "Auto (best quality)"
                         res_dropdown['values'] = [default_text]
                         res_dropdown.set(default_text)
+                        # Display error message
+                        if output_text:
+                            output_text.configure(state="normal")
+                            output_text.delete("1.0", tk.END)  # Clear existing text
+                            output_text.insert(tk.END, f"Error: {data}\n")
+                            output_text.see(tk.END)  # Make sure text is visible
+                            output_text.configure(state="disabled")
+                            root.update()  # Force update of display
                 else:
                     root.after(100, check_queue)
             except tk.TkError:
