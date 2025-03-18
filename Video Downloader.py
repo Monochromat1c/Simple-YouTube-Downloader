@@ -331,14 +331,18 @@ def download_button_clicked(root, url_entry, download_type, output_text, downloa
         selected_res = res_dropdown.get()
         resolution_id = res_dropdown.format_ids.get(selected_res, None)
     
+    output_text.configure(state="normal")
     output_text.insert(tk.END, f"Downloading to: {download_path_var.get()}\n")
     output_text.insert(tk.END, f"Downloading: {video_url}\n")
     output_text.see(tk.END)
+    output_text.configure(state="disabled")
     root.update()
 
     def update_output(text):
+        output_text.configure(state="normal")
         output_text.insert(tk.END, text)
         output_text.see(tk.END)
+        output_text.configure(state="disabled")
         root.update()
 
     def update_progress(percentage):
@@ -348,8 +352,10 @@ def download_button_clicked(root, url_entry, download_type, output_text, downloa
     download_video(video_url, download_type_str, update_output, download_path_var.get(), 
                   update_progress, resolution_id)
     progress_var.set(0)
+    output_text.configure(state="normal")
     output_text.insert(tk.END, "Download Success!\n")
     output_text.see(tk.END)
+    output_text.configure(state="disabled")
     root.update()
     
     # Get reference to download button
@@ -361,10 +367,12 @@ def download_button_clicked(root, url_entry, download_type, output_text, downloa
             
     # Clear everything after 2 seconds
     def clear_all():
+        output_text.configure(state="normal")
         output_text.delete("1.0", tk.END)
+        output_text.configure(state="disabled")
         url_entry.delete(0, tk.END)
-        res_dropdown['values'] = ["Auto (up to 1080p)"]
-        res_dropdown.set("Auto (up to 1080p)")
+        res_dropdown['values'] = ["Auto (up to 1080p only)"]
+        res_dropdown.set("Auto (up to 1080p only)")
         if download_button:
             download_button.configure(state='disabled')
             
@@ -489,12 +497,12 @@ def create_gui():
     res_label.pack(side=tk.LEFT, padx=(0, 5))
     
     res_dropdown = ttk.Combobox(res_frame, width=20, state="readonly")
-    res_dropdown['values'] = ["Auto (up to 1080p)"]
-    res_dropdown.set("Auto (up to 1080p)")
+    res_dropdown['values'] = ["Auto (up to 1080p only)"]
+    res_dropdown.set("Auto (up to 1080p only)")
     res_dropdown.pack(side=tk.LEFT)
 
     # Output Text Area
-    output_text = scrolledtext.ScrolledText(root, height=10)
+    output_text = scrolledtext.ScrolledText(root, height=10, state="disabled")
     output_text.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
     root.mainloop()
@@ -535,21 +543,21 @@ def check_url(url_entry, res_dropdown, download_type, root):
                         formats = data
                         if formats:
                             # Add "Auto (up to 1080p)" option at the beginning
-                            formats = [("Auto (up to 1080p)", "")] + formats
+                            formats = [("Auto (up to 1080p only)", "")] + formats
                             # Update dropdown values
                             res_dropdown['values'] = [f[0] for f in formats]
                             res_dropdown.format_ids = {f[0]: f[1] for f in formats}
-                            res_dropdown.set("Auto (up to 1080p)")
+                            res_dropdown.set("Auto (up to 1080p only)")
                             # Enable download button on successful fetch
                             if download_button:
                                 download_button.configure(state='normal')
                         else:
-                            res_dropdown['values'] = ["Auto (up to 1080p)"]
-                            res_dropdown.set("Auto (up to 1080p)")
+                            res_dropdown['values'] = ["Auto (up to 1080p only)"]
+                            res_dropdown.set("Auto (up to 1080p only)")
                     else:
                         messagebox.showerror("Error", f"Failed to fetch formats: {data}")
-                        res_dropdown['values'] = ["Auto (up to 1080p)"]
-                        res_dropdown.set("Auto (up to 1080p)")
+                        res_dropdown['values'] = ["Auto (up to 1080p only)"]
+                        res_dropdown.set("Auto (up to 1080p only)")
                 else:
                     root.after(100, check_queue)
             except tk.TkError:
