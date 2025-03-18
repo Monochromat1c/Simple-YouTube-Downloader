@@ -7,15 +7,58 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, filedialog
 import time
 import os
+from typing import List, Tuple
 
 def get_downloads_folder():
     """Get the default downloads folder path"""
     return os.path.join(os.path.expanduser("~"), "Downloads")
 
-def download_video(video_url, download_type, output_callback, download_path, update_progress_callback):
+def get_available_formats(video_url) -> List[Tuple[str, str]]:
+    """Gets available MP4 video formats and returns list of (resolution, format_id) tuples"""
+    try:
+        # Add startupinfo to hide console window
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+
+        command = [
+            "yt-dlp",
+            "-j",
+            "--no-playlist",
+            video_url
+        ]
+        
+        result = subprocess.run(command, capture_output=True, text=True, startupinfo=startupinfo)
+        video_info = json.loads(result.stdout)
+        
+        formats = []
+        seen_resolutions = set()
+        
+        # Get all MP4 video formats
+        for fmt in video_info.get('formats', []):
+            if fmt.get('ext') == 'mp4' and fmt.get('vcodec') != 'none':
+                height = fmt.get('height')
+                if height and height not in seen_resolutions:
+                    seen_resolutions.add(height)
+                    formats.append((f"{height}p", fmt['format_id']))
+        
+        # Sort by resolution (highest first)
+        formats.sort(key=lambda x: int(x[0][:-1]), reverse=True)
+        return formats
+    
+    except Exception as e:
+        print(f"Error getting formats: {e}")
+        return []
+
+def download_video(video_url, download_type, output_callback, download_path, update_progress_callback, resolution_id=None):
     """Downloads the video, updates progress, and sends output to callback."""
     if download_type == 'v':
-        format_arg = 'bv*[ext=mp4][height<=1080]+ba/b[ext=mp4]'
+        if resolution_id:
+            format_arg = f'{resolution_id}+ba/b[ext=mp4]'
+        else:
+            format_arg = 'bv*[ext=mp4][height<=1080]+ba/b[ext=mp4]'
         format_sort_arg = '-S ext:webm:none'
     elif download_type == 'a':
         format_arg = 'ba[ext=m4a]/ba[ext=mp3]'
@@ -83,10 +126,39 @@ def select_directory(current_path_var):
     if dir_path:  # If a directory was selected
         current_path_var.set(dir_path)
 
-def download_button_clicked(root, url_entry, download_type, output_text, download_path_var, progress_var):
+def url_changed(event, url_entry, res_dropdown, download_type, root):
+    """Handle URL entry changes"""
+    url = url_entry.get()
+    if url.strip():
+        # Clear existing options
+        res_dropdown['values'] = []
+        res_dropdown.set('')
+        
+        if download_type.get() == 1:  # Only for video downloads
+            # Get available formats
+            formats = get_available_formats(url)
+            if formats:
+                # Add "Auto (up to 1080p)" option at the beginning
+                formats = [("Auto (up to 1080p)", "")] + formats
+                # Update dropdown values
+                res_dropdown['values'] = [f[0] for f in formats]
+                res_dropdown.format_ids = {f[0]: f[1] for f in formats}
+                res_dropdown.set("Auto (up to 1080p)")
+            else:
+                res_dropdown['values'] = ["Auto (up to 1080p)"]
+                res_dropdown.set("Auto (up to 1080p)")
+
+def download_button_clicked(root, url_entry, download_type, output_text, download_path_var, progress_var, res_dropdown):
     """Handles download button, updates progress, and manages output."""
     video_url = url_entry.get()
     download_type_str = 'v' if download_type.get() == 1 else 'a'
+    
+    # Get selected resolution format_id
+    resolution_id = None
+    if download_type_str == 'v' and hasattr(res_dropdown, 'format_ids'):
+        selected_res = res_dropdown.get()
+        resolution_id = res_dropdown.format_ids.get(selected_res, None)
+    
     output_text.insert(tk.END, f"Downloading to: {download_path_var.get()}\n")
     output_text.insert(tk.END, f"Downloading: {video_url}\n")
     output_text.see(tk.END)
@@ -99,10 +171,11 @@ def download_button_clicked(root, url_entry, download_type, output_text, downloa
 
     def update_progress(percentage):
         progress_var.set(percentage)
-        root.update_idletasks()  # Important for smooth progress bar updates
+        root.update_idletasks()
 
-    download_video(video_url, download_type_str, update_output, download_path_var.get(), update_progress)
-    progress_var.set(0)  # Reset progress bar
+    download_video(video_url, download_type_str, update_output, download_path_var.get(), 
+                  update_progress, resolution_id)
+    progress_var.set(0)
     output_text.insert(tk.END, "Download Success!\n")
     output_text.see(tk.END)
     root.update()
@@ -197,7 +270,7 @@ def create_gui():
         url_button_frame,
         text="Download",
         command=lambda: download_button_clicked(
-            root, url_entry, download_type, output_text, download_path_var, progress_var
+            root, url_entry, download_type, output_text, download_path_var, progress_var, res_dropdown
         )
     )
     download_button.pack(side=tk.LEFT, padx=(5,0))
@@ -211,6 +284,21 @@ def create_gui():
     video_radio.pack(side=tk.LEFT)
     audio_radio = ttk.Radiobutton(radio_frame, text="Audio", variable=download_type, value=2)
     audio_radio.pack(side=tk.LEFT, padx=(10, 0))  # 10 pixels space between radio buttons
+
+    # Add Resolution Dropdown after radio buttons
+    res_frame = ttk.Frame(root)
+    res_frame.grid(row=2, column=1, padx=5, pady=5, sticky="e")
+    
+    res_label = ttk.Label(res_frame, text="Resolution:")
+    res_label.pack(side=tk.LEFT, padx=(0, 5))
+    
+    res_dropdown = ttk.Combobox(res_frame, width=15, state="readonly")
+    res_dropdown['values'] = ["Auto (up to 1080p)"]
+    res_dropdown.set("Auto (up to 1080p)")
+    res_dropdown.pack(side=tk.LEFT)
+
+    # Bind URL entry changes
+    url_entry.bind('<KeyRelease>', lambda e: url_changed(e, url_entry, res_dropdown, download_type, root))
 
     # Output Text Area
     output_text = scrolledtext.ScrolledText(root, width=60, height=10)
